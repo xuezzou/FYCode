@@ -63,25 +63,7 @@ class FYFeatures(object):
         self.input_mask = input_mask,
         self.segment_ids = segment_ids,
         self.start_position = start_position,
-        self.end_position = end_position,
-
-
-# class FYDataset(Dataset):
-#
-#     def __init__(self, features):
-#         self.features = features
-#
-#     def __len__(self):
-#         return len(self.features)
-#
-#     def __getitem__(self, idx):
-#         sample = dict()
-#         sample['input_ids'] = self.features[idx].input_ids[0]
-#         sample['input_mask'] = self.features[idx].input_mask[0]
-#         sample['segment_ids'] = self.features[idx].segment_ids[0]
-#         sample['start_position'] = self.features[idx].start_position[0]
-#         sample['end_position'] = self.features[idx].end_position[0]
-#         return sample
+        self.end_position = end_position
 
 
 def get_data():
@@ -251,7 +233,9 @@ def evaluate(model, data_valid):
             else:
                 false_samples += 1
 
-    print('exact match: {}/{} = {}'.format(true_samples, false_samples, true_samples/(false_samples + true_samples)))
+    print('evaluation on valid data, exact match: {}/{} = {}'.format(true_samples, (false_samples + true_samples),
+                                                                     true_samples / (false_samples + true_samples)))
+
 
 def main():
     examples = get_data()
@@ -284,7 +268,6 @@ def main():
                 model.eval()
                 print('step {} of epoch {}, loss {}'.format(step + 1, epoch + 1, running_loss / 200))
                 running_loss = 0.0
-                print('doing evaluation')
                 evaluate(model, data_valid)
                 model.train()
     print('training finished')
