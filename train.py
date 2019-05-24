@@ -59,10 +59,10 @@ class FYFeatures(object):
         yes： start = 2， end = 1
         no： start = 3， end = 2
         """
-        self.input_ids = input_ids,
-        self.input_mask = input_mask,
-        self.segment_ids = segment_ids,
-        self.start_position = start_position,
+        self.input_ids = input_ids
+        self.input_mask = input_mask
+        self.segment_ids = segment_ids
+        self.start_position = start_position
         self.end_position = end_position
 
 
@@ -143,7 +143,43 @@ def convert_examples_to_features(examples):
         doc = example.doc_tokens
         start_position = example.start_position
         end_position = example.end_position
-        if len(question) + len(doc) + 3 <= 512:
+
+        if (example.start_position == 2 and example.end_position == 1) or (
+                example.start_position == 3 and example.end_position == 2):
+            start_point = 0
+            while start_point < len(doc) and len(doc[start_point:start_point + (512 - 3 - len(question))]) > 125:
+                tokens = []
+                segment_ids = []
+                tokens.append("[CLS]")
+                segment_ids.append(0)
+                for token in question:
+                    tokens.append(token)
+                    segment_ids.append(0)
+                tokens.append("[SEP]")
+                segment_ids.append(0)
+                for token in doc[start_point:start_point + (512 - 3 - len(question))]:
+                    tokens.append(token)
+                    segment_ids.append(1)
+                tokens.append("[SEP]")
+                segment_ids.append(1)
+                input_ids = full_tokenizer.convert_tokens_to_ids(tokens)
+                input_mask = [1] * len(input_ids)
+                while len(input_ids) < 512:
+                    input_ids.append(0)
+                    input_mask.append(0)
+                    segment_ids.append(0)
+                feature = FYFeatures(input_ids=input_ids,
+                                     input_mask=input_mask,
+                                     segment_ids=segment_ids,
+                                     start_position=example.start_position,
+                                     end_position=example.end_position)
+                # print()
+                # print(full_tokenizer.convert_ids_to_tokens(input_ids))
+                # print(full_tokenizer.convert_ids_to_tokens(input_ids[start_position + len(question) + 2: end_position + len(question) + 2]))
+                features.append(feature)
+                start_point += 125
+
+        elif len(question) + len(doc) + 3 <= 512:
             tokens = []
             segment_ids = []
             tokens.append("[CLS]")
@@ -173,9 +209,10 @@ def convert_examples_to_features(examples):
             # print(full_tokenizer.convert_ids_to_tokens(input_ids))
             # print(full_tokenizer.convert_ids_to_tokens(input_ids[start_position + len(question) + 2: end_position + len(question) + 2]))
             features.append(feature)
+
         else:
             start_point = 0
-            while start_point < start_position:
+            while start_point < len(doc) and len(doc[start_point:start_point + (512 - 3 - len(question))]) > 125:
                 tokens = []
                 segment_ids = []
                 tokens.append("[CLS]")
@@ -196,11 +233,18 @@ def convert_examples_to_features(examples):
                     input_ids.append(0)
                     input_mask.append(0)
                     segment_ids.append(0)
-                feature = FYFeatures(input_ids=input_ids,
-                                     input_mask=input_mask,
-                                     segment_ids=segment_ids,
-                                     start_position=start_position + len(question) + 2 - start_point,
-                                     end_position=end_position + len(question) + 2 - start_point)
+                if start_point < start_position and (end_position + len(question) + 2 - start_point) < 512:
+                    feature = FYFeatures(input_ids=input_ids,
+                                         input_mask=input_mask,
+                                         segment_ids=segment_ids,
+                                         start_position=start_position + len(question) + 2 - start_point,
+                                         end_position=end_position + len(question) + 2 - start_point)
+                else:
+                    feature = FYFeatures(input_ids=input_ids,
+                                         input_mask=input_mask,
+                                         segment_ids=segment_ids,
+                                         start_position=1,
+                                         end_position=0)
                 # print()
                 # print(full_tokenizer.convert_ids_to_tokens(input_ids))
                 # print(full_tokenizer.convert_ids_to_tokens(
@@ -216,11 +260,11 @@ def evaluate(model, data_valid):
     for step in range(len(data_valid) // BATCH_SIZE):
         batch = data_valid[step * BATCH_SIZE: (step + 1) * BATCH_SIZE]
 
-        input_ids = torch.Tensor([feature.input_ids for feature in batch]).squeeze(1).long().to(device)
-        token_type_ids = torch.Tensor([feature.segment_ids for feature in batch]).squeeze(1).long().to(device)
-        input_mask = torch.Tensor([feature.input_mask for feature in batch]).squeeze(1).long().to(device)
-        start_positions = torch.Tensor([feature.start_position for feature in batch]).squeeze(1).long().to(device)
-        end_positions = torch.Tensor([feature.end_position for feature in batch]).squeeze(1).long().to(device)
+        input_ids = torch.Tensor([feature.input_ids for feature in batch]).long().to(device)
+        token_type_ids = torch.Tensor([feature.segment_ids for feature in batch]).long().to(device)
+        input_mask = torch.Tensor([feature.input_mask for feature in batch]).long().to(device)
+        start_positions = torch.Tensor([feature.start_position for feature in batch]).long().to(device)
+        end_positions = torch.Tensor([feature.end_position for feature in batch]).long().to(device)
 
         start_position_logits, end_position_logits = model(input_ids=input_ids, token_type_ids=token_type_ids,
                                                            attention_mask=input_mask)
@@ -250,11 +294,11 @@ def main():
         for step in range(len(data_train) // BATCH_SIZE):
             batch = data_train[step * BATCH_SIZE: (step + 1) * BATCH_SIZE]
 
-            input_ids = torch.Tensor([feature.input_ids for feature in batch]).squeeze(1).long().to(device)
-            token_type_ids = torch.Tensor([feature.segment_ids for feature in batch]).squeeze(1).long().to(device)
-            input_mask = torch.Tensor([feature.input_mask for feature in batch]).squeeze(1).long().to(device)
-            start_positions = torch.Tensor([feature.start_position for feature in batch]).squeeze(1).long().to(device)
-            end_positions = torch.Tensor([feature.end_position for feature in batch]).squeeze(1).long().to(device)
+            input_ids = torch.Tensor([feature.input_ids for feature in batch]).long().to(device)
+            token_type_ids = torch.Tensor([feature.segment_ids for feature in batch]).long().to(device)
+            input_mask = torch.Tensor([feature.input_mask for feature in batch]).long().to(device)
+            start_positions = torch.Tensor([feature.start_position for feature in batch]).long().to(device)
+            end_positions = torch.Tensor([feature.end_position for feature in batch]).long().to(device)
 
             optimizer.zero_grad()
             loss = model(input_ids=input_ids, token_type_ids=token_type_ids,
@@ -264,14 +308,15 @@ def main():
             optimizer.step()
 
             running_loss += loss.item()
-            if (step + 1) % 200 == 0:
+            if (step + 1) % 500 == 0:
                 model.eval()
-                print('step {} of epoch {}, loss {}'.format(step + 1, epoch + 1, running_loss / 200))
+                print('step {} of epoch {}, loss {}'.format(step + 1, epoch + 1, running_loss / 500))
                 running_loss = 0.0
                 evaluate(model, data_valid)
                 model.train()
     print('training finished')
     print('doing final evaluation')
+    model.eval()
     evaluate(model, data_valid)
     torch.save(model, './model.pt')
 
