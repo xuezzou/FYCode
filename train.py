@@ -34,7 +34,7 @@ class FYExample(object):
                  end_position=None,
                  answer_text=None):
         """
-
+        tokenized完的例子
         无法回答：start = 1， end = 0
         yes： start = 2， end = 1
         no： start = 3， end = 2
@@ -43,7 +43,7 @@ class FYExample(object):
         self.doc_tokens = doc_tokens
         self.start_position = start_position
         self.end_position = end_position
-        self.answer_text = None
+        self.answer_text = answer_text
 
 
 class FYFeatures(object):
@@ -54,7 +54,7 @@ class FYFeatures(object):
                  start_position,
                  end_position):
         """
-
+        变成输入到模型中的features的例子
         无法回答：start = 1， end = 0
         yes： start = 2， end = 1
         no： start = 3， end = 2
