@@ -19,6 +19,7 @@ full_tokenizer = tokenization.BertTokenizer.from_pretrained('bert-base-chinese',
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model = torch.load('./model.pt')
 model.to(device)
+model.eval()
 
 
 class FYExample(object):
