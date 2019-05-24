@@ -286,6 +286,19 @@ def main():
     features = convert_examples_to_features(examples)
     print('length of features', len(features))
     random.shuffle(features)
+    #
+    # for feature in features[:50]:
+    #     print('----')
+    #     print(''.join(full_tokenizer.convert_ids_to_tokens(feature.input_ids)))
+    #     if feature.start_position < feature.end_position:
+    #         print(''.join(full_tokenizer.convert_ids_to_tokens(feature.input_ids[feature.start_position:feature.end_position])))
+    #     elif feature.start_position == 1 and feature.end_position == 0:
+    #         print('no answer')
+    #     elif feature.start_position == 2 and feature.end_position == 1:
+    #         print('yes')
+    #     elif feature.start_position == 3 and feature.end_position == 2:
+    #         print('no')
+    #
     data_train, data_valid = train_test_split(features, test_size=0.1)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
