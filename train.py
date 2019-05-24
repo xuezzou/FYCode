@@ -6,10 +6,10 @@ import os
 import json
 import re
 import random
+import pickle
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
-
 
 DATA_PATH = 'small_train_data.json'
 tokenizer = tokenization.BasicTokenizer()
@@ -19,8 +19,11 @@ model = pytorch_pretrained_bert.modeling.BertForQuestionAnswering.from_pretraine
 model.to(device)
 
 EPOCHS = 5
-BATCH_SIZE = 12
+BATCH_SIZE = 4
 LR = 1e-5
+
+TRAIN = True
+VALID = False
 
 
 class FYExample(object):
@@ -225,33 +228,69 @@ def convert_examples_to_features(examples):
     return features
 
 
+def evaluate(model, data_valid):
+    true_samples = 0
+    false_samples = 0
+    for step in range(len(data_valid) // BATCH_SIZE):
+        batch = data_valid[step * BATCH_SIZE: (step + 1) * BATCH_SIZE]
+
+        input_ids = torch.Tensor([feature.input_ids for feature in batch]).squeeze(1).long().to(device)
+        token_type_ids = torch.Tensor([feature.segment_ids for feature in batch]).squeeze(1).long().to(device)
+        input_mask = torch.Tensor([feature.input_mask for feature in batch]).squeeze(1).long().to(device)
+        start_positions = torch.Tensor([feature.start_position for feature in batch]).squeeze(1).long().to(device)
+        end_positions = torch.Tensor([feature.end_position for feature in batch]).squeeze(1).long().to(device)
+
+        start_position_logits, end_position_logits = model(input_ids=input_ids, token_type_ids=token_type_ids,
+                                                           attention_mask=input_mask)
+        predicted_start_positions = torch.argmax(start_position_logits, dim=-1, keepdim=False)
+        predicted_end_positions = torch.argmax(end_position_logits, dim=-1, keepdim=False)
+
+        for i in range(BATCH_SIZE):
+            if predicted_start_positions[i] == start_positions[i] and predicted_end_positions[i] == end_positions[i]:
+                true_samples += 1
+            else:
+                false_samples += 1
+
+    print('exact match: {}/{} = {}'.format(true_samples, false_samples, true_samples/(false_samples + true_samples)))
+
 def main():
     examples = get_data()
     features = convert_examples_to_features(examples)
     print('length of features', len(features))
+    random.shuffle(features)
+    data_train, data_valid = train_test_split(features, test_size=0.1)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     running_loss = 0
     for epoch in range(EPOCHS):
-        random.shuffle(features)
-        for step in range(len(features) // BATCH_SIZE):
-            batch = features[step * BATCH_SIZE: (step + 1) * BATCH_SIZE]
+        for step in range(len(data_train) // BATCH_SIZE):
+            batch = data_train[step * BATCH_SIZE: (step + 1) * BATCH_SIZE]
+
             input_ids = torch.Tensor([feature.input_ids for feature in batch]).squeeze(1).long().to(device)
             token_type_ids = torch.Tensor([feature.segment_ids for feature in batch]).squeeze(1).long().to(device)
             input_mask = torch.Tensor([feature.input_mask for feature in batch]).squeeze(1).long().to(device)
             start_positions = torch.Tensor([feature.start_position for feature in batch]).squeeze(1).long().to(device)
-            pend_positions = torch.Tensor([feature.end_position for feature in batch]).squeeze(1).long().to(device)
+            end_positions = torch.Tensor([feature.end_position for feature in batch]).squeeze(1).long().to(device)
 
             optimizer.zero_grad()
             loss = model(input_ids=input_ids, token_type_ids=token_type_ids,
                          attention_mask=input_mask, start_positions=start_positions,
-                         end_positions=pend_positions)
+                         end_positions=end_positions)
             loss.backward()
             optimizer.step()
 
             running_loss += loss.item()
             if (step + 1) % 200 == 0:
+                model.eval()
                 print('step {} of epoch {}, loss {}'.format(step + 1, epoch + 1, running_loss / 200))
                 running_loss = 0.0
+                print('doing evaluation')
+                evaluate(model, data_valid)
+                model.train()
+    print('training finished')
+    print('doing final evaluation')
+    evaluate(model, data_valid)
+    torch.save(model, './model.pt')
 
 
 if __name__ == '__main__':
